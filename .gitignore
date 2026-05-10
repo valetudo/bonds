@@ -1,0 +1,31 @@
+# Python venv & caches
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local SQLite DB (auto-built on first scrape; can grow large)
+bonds.db
+bonds.db-journal
+bonds.db-wal
+bonds.db-shm
+
+# Selenium driver cache (webdriver-manager)
+.wdm/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local debug output / scratch
+*.log
+*.tmp
+debug_output/
