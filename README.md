@@ -1,75 +1,114 @@
-# Bonds Screener — local single-file project
+# Bond Ladder
 
-Tutto in `bonds/`: scraping da [Borsa Italiana — Ricerca Avanzata](https://www.borsaitaliana.it/borsa/obbligazioni/ricerca-avanzata.html), database SQLite locale (`bonds.db`), screener Flask con grafico interattivo, tabella filtrabile, anomalie BTP EUR ed export portabile in HTML self-contained.
+App Python/Streamlit standalone che fa tre cose, usando due fonti di **Borsa
+Italiana** — **MOT** (ricerca avanzata, via Selenium) ed **EuroTLX** (endpoint
+diretto, via requests; qui vivono gli Eurobond istituzionali "XS…"):
+
+1. **Costruzione dell'universo** di obbligazioni *plain vanilla* a cedola fissa
+   tramite i filtri del form (Struttura, Tipologia, Tipo Cedola, Subordinazione,
+   Paese, Valuta). **La categoria viene dai filtri, mai dal nome del bond.**
+2. **Aggiornamento prezzi** on-demand per gli ISIN già in universo.
+3. **Costruzione di un bond ladder** parametrico (gradinata di scadenze).
+
+Il rendimento (**YTM**) non viene mai scaricato: è **calcolato** dai dati
+(prezzo, scadenza, cedola), sia **lordo** sia **netto** secondo il regime
+fiscale italiano 2026. Modalità "Bilanciata": frequenza cedola configurabile e
+rateo stimato dall'anniversario della scadenza, senza visitare le schede ISIN.
+
+## Requisiti
+
+- Python 3.10+
+- Google Chrome (lo scraper usa Selenium headless; il driver è scaricato
+  automaticamente da `webdriver-manager` al primo avvio)
+
+## Setup (prima volta)
+
+Il progetto è su Google Drive: crea il **venv fuori dal Drive** per evitare la
+sincronizzazione di migliaia di file.
+
+```powershell
+python -m venv C:\Users\Beppe\venvs\bond_ladder
+C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe -m pip install -r requirements.txt
+```
 
 ## Avvio
 
-```
-start.bat
-```
+**Doppio click su `start.bat`** — apre il browser sull'app e tiene aperta una
+finestra col server (chiudila per fermare il programma).
 
-Apre `http://127.0.0.1:5070/` nel browser di default. Click **"⟳ Aggiorna"** per scaricare i prezzi da Borsa Italiana.
+In alternativa, da terminale:
 
-Per spegnere: chiudere la finestra "Bonds Screener Server".
-
-## Setup iniziale (solo prima volta)
-
-PowerShell o cmd, da dentro la cartella `bonds`:
-
-```
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```powershell
+.\start.ps1
 ```
 
-(In PowerShell 5.1 evita `&&`: esegui i due comandi separatamente o uniscili con `;`.)
+oppure manualmente:
 
-Selenium scarica automaticamente il driver Chrome al primo run via `webdriver-manager`.
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe -m streamlit run app.py
+```
 
-## Cosa scarica
+Si apre su `http://localhost:8501` (o porta indicata). I tre tab:
 
-Lo scraper applica i filtri della pagina di ricerca avanzata in due passate:
+- **Overview** — scatter YTM vs anni alla scadenza (toggle lordo/netto, colori
+  per categoria) + tabella filtrabile.
+- **Aggiorna Dati** — selettore **Mercati** (MOT / EuroTLX), "Scarica universo
+  da BI" (con progress e log live) e "Aggiorna prezzi". Idempotente: rieseguire
+  non duplica gli ISIN; per un ISIN su entrambi i mercati vince MOT.
+- **Bond Ladder** — form con validazione somma allocazioni = 100%, output per
+  gradino, stacked bar e riepilogo (YTM medio ponderato, capitale, n. bond).
 
-| Profilo         | Struttura     | Tipo Cedola  | Rimborso Anticipato |
-|-----------------|---------------|--------------|---------------------|
-| `fixed_vanilla` | Plain Vanilla | Fisso        | No                  |
-| `zero_coupon`   | Plain Vanilla | Zero Coupon  | No                  |
+## Dati di esempio (inventati)
 
-Per ogni profilo scorre **tutte le pagine** dei risultati con un delay random di 0.6–1.5 s tra una pagina e la successiva (anti-ban). Per ogni riga estrae ISIN, descrizione, ULTIMO (prezzo), CEDOLA, SCADENZA — niente visite a schede individuali.
+La cartella `data/` di questo repo contiene **dati FINTI** generati da
+[`make_sample_data.py`](make_sample_data.py): pochi bond fittizi con descrizioni
+tipo `ESEMPIO … (FAKE)`, giusto per far partire l'app con qualcosa di mostrabile.
 
-Esclusi a monte (filtri lato sito): callable, floating, inflation-linked. Gli STRIP vengono filtrati comunque a runtime via nome.
+- **Non sono dati reali** né prezzi/rendimenti veri.
+- Vengono **sovrascritti** dal primo *Scarica universo da BI* nell'app.
+- I file dati di runtime (`data/*.parquet`, `data/scrape_log.txt`) sono
+  **git-ignored** (vedi `.gitignore`); questi campioni sono committati a forza
+  (`git add -f`) solo a scopo dimostrativo. **Non versionare i tuoi dati reali.**
+- Per rigenerarli: `python make_sample_data.py`.
+
+## Test
+
+```powershell
+$env:PYTHONPATH = (Get-Location)
+C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe -m unittest discover -s tests
+```
 
 ## Struttura
 
 ```
-bonds/
-├── app.py              Flask + UI (route + template + portable export)
-├── scraper.py          Selenium advanced search + parser puro + CLI dry-run
-├── database.py         SQLite layer (bonds, bond_prices, scrape_runs)
-├── calculations.py     net yield, duration, anomalie (pure functions)
-├── requirements.txt
-├── start.bat
-├── bonds.db            (auto-creato al primo run)
-└── tests/
-    ├── test_database.py
-    ├── test_calculations.py
-    ├── test_scraper_parser.py
-    └── test_app_integration.py
-```
-
-## Test
-
-```
-python -m unittest discover -v tests
-```
-
-Coverage attuale: **40 test**, tutti passanti, su database / calcoli / parser scraper / integrazione Flask. Lo scraper Selenium è isolato dai test (testiamo solo i parser puri); per debug del Selenium usare il CLI:
-
-```
-python scraper.py --show --dry-run --profile fixed_vanilla --verbose
+app.py            entrypoint Streamlit (3 tab)
+config.py         URL, id dei <select>, value filtri, paesi, default
+scraper/          search.py (MOT), eurotlx.py (EuroTLX), price_updater.py, probe.py, detail.py (stub)
+finance/          daycount.py, yield_calc.py (YTM lordo, brentq), tax.py (netto), enrich.py
+ladder/           builder.py (LadderParams + build_ladder)
+data/             store.py (parquet idempotente) + universe/prices.parquet (runtime)
+ui/               charts.py (Plotly), sidebar.py (controlli)
+tests/            test unitari (finance, store, parser/profili, builder)
 ```
 
 ## Note
 
-- I bond senza prezzo restano in DB ma sono **esclusi dal calcolo della media yield** e dal grafico (niente `NaN`/errori).
-- Database in `bonds.db` nella stessa cartella, formato SQLite, schema auto-creato.
-- L'export portabile è un singolo `.html` con tutti i dati e i grafici interattivi inline (richiede solo connessione internet per caricare Plotly + jQuery + DataTables da CDN).
+- **Categoria dai filtri**: `gov_ita`/`gov_eur` dalla Tipologia, `corp_ita`/
+  `corp_eur` dal Paese o (default, più veloce) dal prefisso ISIN — in tal caso
+  il record è marcato `paese_da_isin_fallback` e loggato. L'opzione "Split per
+  Paese" usa l'iterazione del dropdown Paese (paese autoritativo, più lento).
+- **Cedola**: la colonna CEDOLA di BI mostra spesso la cedola *periodica*; il
+  numero annuo è estratto dal nome (estrazione fattuale), con la tabella come
+  fallback.
+- **Callable**: il filtro server-side "Rimborso Anticipato=No" è inaffidabile su
+  BI (azzera i governativi); i callable sono scartati lato client dal nome.
+- **EuroTLX**: mercato separato (la ricerca avanzata MOT copre solo MOT/Euronext
+  Access). Classifica per *categoria* strumento (mappata nei 4 bucket) e **non**
+  ha filtri Struttura/Cedola/Subordinazione: l'eligibilità (escludere floater
+  `Tv`, index/inflation-linked, convertibili, callable) è fatta dal nome. Prezzo
+  = Ultimo, con fallback al **mid(bid, ask)** per i (molti) titoli illiquidi.
+- **Anti-ban**: pause random tra le pagine; non rimuoverle.
+- **Aliquote 2026**: 12,5% titoli di Stato/white-list, 26% corporate; bollo
+  0,2%/anno opzionale. Calcolo indicativo, **non è consulenza fiscale**.
+```

@@ -1,31 +1,19 @@
-# Python venv & caches
-.venv/
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*.egg-info/
+.pytest_cache/
 
-# Local SQLite DB (auto-built on first scrape; can grow large)
-bonds.db
-bonds.db-journal
-bonds.db-wal
-bonds.db-shm
+# venv
+.venv/
+venv/
 
-# Selenium driver cache (webdriver-manager)
-.wdm/
+# runtime data (rigenerati dallo scraping)
+data/*.parquet
+data/scrape_log.txt
 
-# IDE / editor
-.idea/
-.vscode/
-*.swp
-*~
+# streamlit
+.streamlit/secrets.toml
 
-# OS junk
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Local debug output / scratch
-*.log
-*.tmp
-debug_output/
+# materiale di riferimento (sorgenti di altri repo)
+_ref/
