@@ -68,9 +68,10 @@ tipo `ESEMPIO … (FAKE)`, giusto per far partire l'app con qualcosa di mostrabi
 - **Non sono dati reali** né prezzi/rendimenti veri.
 - Vengono **sovrascritti** dal primo *Scarica universo da BI* nell'app.
 - I file dati di runtime (`data/*.parquet`, `data/scrape_log.txt`) sono
-  **git-ignored** (vedi `.gitignore`); questi campioni sono committati a forza
-  (`git add -f`) solo a scopo dimostrativo. **Non versionare i tuoi dati reali.**
-- Per rigenerarli: `python make_sample_data.py`.
+  **git-ignored**; questi campioni sono committati a forza (`git add -f`) solo a
+  scopo dimostrativo. **Non versionare i tuoi dati reali.**
+- Per (ri)generarli: `python make_sample_data.py` (si rifiuta di sovrascrivere
+  dati reali; usa `--force` per forzare).
 
 ## Test
 
@@ -94,10 +95,14 @@ tests/            test unitari (finance, store, parser/profili, builder)
 
 ## Note
 
-- **Categoria dai filtri**: `gov_ita`/`gov_eur` dalla Tipologia, `corp_ita`/
-  `corp_eur` dal Paese o (default, più veloce) dal prefisso ISIN — in tal caso
-  il record è marcato `paese_da_isin_fallback` e loggato. L'opzione "Split per
-  Paese" usa l'iterazione del dropdown Paese (paese autoritativo, più lento).
+- **Categoria dai filtri**: `gov_ita`/`gov_eur` dalla Tipologia; `corp_ita`/
+  `corp_eur` e il paese dal **prefisso ISIN** (record marcato
+  `paese_da_isin_fallback`). Si evita l'iterazione paese-per-paese: sarebbe ~20×
+  più lenta per gli stessi titoli (per un ISIN specifico, guarda la scheda su BI).
+- **Zero-coupon** (BOT, CTZ, …) **sempre inclusi**.
+- **Salvataggio incrementale**: durante lo scraping i record sono scritti su
+  parquet a blocchi (progresso visibile su disco; un crash non perde tutto, su
+  errore salva il parziale).
 - **Cedola**: la colonna CEDOLA di BI mostra spesso la cedola *periodica*; il
   numero annuo è estratto dal nome (estrazione fattuale), con la tabella come
   fallback.

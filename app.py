@@ -10,6 +10,7 @@ Il rendimento (YTM) è SEMPRE calcolato dai prezzi correnti, mai scaricato.
 """
 from __future__ import annotations
 
+import itertools
 import os
 from dataclasses import asdict
 
@@ -132,18 +133,13 @@ with tab_data:
     )
     valute = st.multiselect("Valute", options=list(config.VALUTE), default=list(config.VALUTE),
                             key="data_valute")
-    opt1, opt2 = st.columns(2)
-    include_zc = opt1.checkbox("Includi zero-coupon", value=False, key="data_zc")
-    split_country = opt2.checkbox(
-        "MOT: split per Paese (più lento, paese autoritativo)", value=False, key="data_split",
-        help="Solo MOT. Se disattivo: gov_eur/corporate in un'unica query, paese dal prefisso ISIN.",
-    )
+    st.caption("Include sempre gli zero-coupon (BOT, CTZ, …). Paese dedotto dal prefisso ISIN. "
+               "Salvataggio incrementale su parquet durante lo scraping (resiste ai crash).")
 
     if st.button("⬇️ Scarica universo da BI", type="primary"):
         vals = tuple(valute) if valute else config.VALUTE
-        mot_profiles = (build_profiles(valute=vals, include_zero_coupon=include_zc,
-                                       split_by_country=split_country) if "MOT" in markets else [])
-        tlx_profiles = (build_eurotlx_profiles(valute=vals, include_zero_coupon=include_zc)
+        mot_profiles = build_profiles(valute=vals, include_zero_coupon=True) if "MOT" in markets else []
+        tlx_profiles = (build_eurotlx_profiles(valute=vals, include_zero_coupon=True)
                         if "EuroTLX" in markets else [])
         total = len(mot_profiles) + len(tlx_profiles)
         prog = st.progress(0.0, text=f"0/{total}")
@@ -163,31 +159,55 @@ with tab_data:
             prog.progress(frac, text=f"{state['done']}/{total} · {p.profile_label} "
                                      f"(pag {p.page}, {p.rows_so_far} righe)")
 
+        # Salvataggio INCREMENTALE: flush su parquet ogni FLUSH_EVERY record, così un
+        # crash a metà non perde tutto e il progresso è visibile su disco. MOT prima
+        # nella catena → per un ISIN su entrambi i mercati vince MOT (upsert keep-first).
+        FLUSH_EVERY = 150
+        tot = {"records": 0, "added": 0, "skipped": 0, "fallback": 0, "prezzi": 0}
+        buf, price_buf = [], {}
+
+        def flush():
+            if not buf:
+                return
+            r = store.upsert_universe([asdict(x) for x in buf])
+            tot["added"] += r["added"]
+            tot["skipped"] += r["skipped"]
+            tot["fallback"] += r["fallback_isin"]
+            if price_buf:
+                tot["prezzi"] += store.save_prices(dict(price_buf))
+                price_buf.clear()
+            buf.clear()
+
+        gens = []
+        if mot_profiles:
+            gens.append(scrape_universe(mot_profiles, headless=True, progress_cb=cb))
+        if tlx_profiles:
+            gens.append(scrape_eurotlx(tlx_profiles, include_zero_coupon=True, progress_cb=cb))
         try:
-            records = []
-            if mot_profiles:
-                with st.spinner("MOT (Selenium) in corso…"):
-                    records += list(scrape_universe(mot_profiles, headless=True, progress_cb=cb))
-            if tlx_profiles:
-                with st.spinner("EuroTLX in corso…"):
-                    records += list(scrape_eurotlx(tlx_profiles, include_zero_coupon=include_zc,
-                                                   progress_cb=cb))
-            # MOT-first nella lista → in caso di ISIN su entrambi i mercati vince MOT.
-            res = store.upsert_universe([asdict(r) for r in records])
-            prices = {r.isin: r.ultimo_price for r in records if r.ultimo_price is not None}
-            n_prices = store.save_prices(prices)
+            with st.spinner("Scraping in corso (salvataggio incrementale)…"):
+                for rec in itertools.chain(*gens):
+                    buf.append(rec)
+                    tot["records"] += 1
+                    if rec.ultimo_price is not None:
+                        price_buf[rec.isin] = rec.ultimo_price
+                    if len(buf) >= FLUSH_EVERY:
+                        flush()
+                flush()
             store.append_log(store.log_line(
-                "RUN", f"mercati={'+'.join(markets) or '-'}", f"record={len(records)}",
-                f"added={res['added']}", f"skip={res['skipped']}", f"prezzi={n_prices}",
+                "RUN", f"mercati={'+'.join(markets) or '-'}", f"record={tot['records']}",
+                f"added={tot['added']}", f"skip={tot['skipped']}", f"prezzi={tot['prezzi']}",
             ))
             get_enriched.clear()
             st.success(
-                f"Fatto ({'+'.join(markets) or 'nessun mercato'}). Record: {len(records)} · "
-                f"nuovi: {res['added']} · già presenti: {res['skipped']} · "
-                f"paese da ISIN: {res['fallback_isin']} · prezzi salvati: {n_prices}."
+                f"Fatto ({'+'.join(markets) or 'nessun mercato'}). Record: {tot['records']} · "
+                f"nuovi: {tot['added']} · già presenti: {tot['skipped']} · "
+                f"paese da ISIN: {tot['fallback']} · prezzi salvati: {tot['prezzi']}."
             )
         except Exception as exc:  # noqa: BLE001
-            st.error(f"Errore durante lo scraping: {exc}")
+            flush()  # salva quanto raccolto prima dell'errore
+            get_enriched.clear()
+            store.append_log(store.log_line("RUN_ERR", f"record_parziali={tot['records']}", str(exc)[:80]))
+            st.error(f"Interrotto da un errore — dati parziali salvati ({tot['records']} record): {exc}")
 
     st.divider()
     st.subheader("B. Aggiorna prezzi")
@@ -201,8 +221,8 @@ with tab_data:
             has_mkt = "mercato" in known.columns
             has_tlx = has_mkt and (known["mercato"] == "EuroTLX").any()
             has_mot = (not has_mkt) or (known["mercato"] != "EuroTLX").any()
-            total2 = (len(build_profiles(valute=vals_known, split_by_country=False)) if has_mot else 0) \
-                + (len(build_eurotlx_profiles(valute=vals_known)) if has_tlx else 0)
+            total2 = (len(build_profiles(valute=vals_known, include_zero_coupon=True)) if has_mot else 0) \
+                + (len(build_eurotlx_profiles(valute=vals_known, include_zero_coupon=True)) if has_tlx else 0)
             prog2 = st.progress(0.0, text="Avvio…")
             log2 = st.empty()
             st2 = {"done": 0, "logs": []}
@@ -216,16 +236,17 @@ with tab_data:
                 prog2.progress(frac, text=f"{st2['done']}/{total2} · {p.profile_label}")
 
             try:
-                prices = {}
+                n = 0
                 if has_mot:
                     mot_known = known[known["mercato"] != "EuroTLX"] if has_mkt else known
                     with st.spinner("Prezzi MOT (Selenium)…"):
-                        prices.update(update_prices(mot_known, headless=True, progress_cb=cb2))
+                        n += store.save_prices(update_prices(mot_known, headless=True,
+                                                             include_zero_coupon=True, progress_cb=cb2))
                 if has_tlx:
                     tlx_isins = set(known[known["mercato"] == "EuroTLX"]["isin"])
                     with st.spinner("Prezzi EuroTLX…"):
-                        prices.update(update_prices_eurotlx(tlx_isins, valute=vals_known, progress_cb=cb2))
-                n = store.save_prices(prices)
+                        n += store.save_prices(update_prices_eurotlx(tlx_isins, valute=vals_known,
+                                                                     include_zero_coupon=True, progress_cb=cb2))
                 store.append_log(store.log_line("PRICES", f"aggiornati={n}"))
                 get_enriched.clear()
                 st.success(f"Prezzi aggiornati: {n}.")

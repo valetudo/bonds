@@ -36,9 +36,7 @@ def update_prices(
         known_isins = {str(x) for x in known}
 
     valute = tuple(valute) if valute else config.VALUTE
-    profiles = build_profiles(
-        valute=valute, include_zero_coupon=include_zero_coupon, split_by_country=False
-    )
+    profiles = build_profiles(valute=valute, include_zero_coupon=include_zero_coupon)
 
     prices: Dict[str, float] = {}
     for rec in scrape_universe(

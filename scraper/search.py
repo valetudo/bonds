@@ -98,18 +98,13 @@ class ScrapeProgress:
 def build_profiles(
     valute: Tuple[str, ...] = config.VALUTE,
     include_zero_coupon: bool = False,
-    split_by_country: bool = False,
 ) -> List[SearchProfile]:
-    """Costruisce i profili di ricerca per le 4 categorie × valute.
+    """Costruisce i profili di ricerca MOT per le 4 categorie × valute.
 
-    split_by_country=False (default, VELOCE): gov_eur e corporate in un'unica
-      query per tipologia; paese (e per i corp anche ita/estero) ricavato dal
-      prefisso ISIN — fallback esplicito e segnalato.
-    split_by_country=True (LENTO, autoritativo): itera il dropdown Paese per
-      gov_eur e per i corporate (decine di query in più).
-
-    Nota: gov_ita vs gov_eur deriva SEMPRE dalla Tipologia (Italiani vs Esteri),
-    non dal paese; corp_ita vs corp_eur deriva dal Paese (o dal prefisso ISIN).
+    Una sola query per (tipologia × valuta × cedola): gov_eur e corporate non
+    iterano i paesi (sarebbe ~20x più lento per gli stessi titoli). gov_ita vs
+    gov_eur deriva dalla Tipologia (Italiani vs Esteri); corp_ita vs corp_eur e
+    il paese si ricavano dal prefisso ISIN (fallback esplicito e segnalato).
     """
     cedole = [config.OPT_CEDOLA_FISSA]
     if include_zero_coupon:
@@ -118,26 +113,13 @@ def build_profiles(
     profs: List[SearchProfile] = []
     for val in valute:
         for ced in cedole:
-            # gov_ita — dai filtri Tipologia (2 tipologie), paese implicito Italia
             for tip in config.TIPOLOGIE_GOV_ITA:
                 profs.append(SearchProfile("gov_ita", tip, val, config.PAESE_ITALIA, ced))
-            # gov_eur — Tipologia "Titoli Di Stato Esteri"
-            if split_by_country:
-                for paese in config.PAESI_NON_ITALIA:
-                    profs.append(SearchProfile("gov_eur", config.TIPOLOGIE_GOV_EUR[0],
-                                               val, paese, ced))
-            else:
-                profs.append(SearchProfile("gov_eur", config.TIPOLOGIE_GOV_EUR[0],
-                                           val, None, ced, resolve_country_from_isin=True))
-            # corp_ita / corp_eur — Tipologia corporate
+            profs.append(SearchProfile("gov_eur", config.TIPOLOGIE_GOV_EUR[0],
+                                       val, None, ced, resolve_country_from_isin=True))
             for tip in config.TIPOLOGIE_CORP:
-                if split_by_country:
-                    profs.append(SearchProfile("corp_ita", tip, val, config.PAESE_ITALIA, ced))
-                    for paese in config.PAESI_NON_ITALIA:
-                        profs.append(SearchProfile("corp_eur", tip, val, paese, ced))
-                else:
-                    profs.append(SearchProfile("corp", tip, val, None, ced,
-                                               resolve_country_from_isin=True))
+                profs.append(SearchProfile("corp", tip, val, None, ced,
+                                           resolve_country_from_isin=True))
     return profs
 
 

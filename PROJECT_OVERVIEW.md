@@ -9,10 +9,11 @@ scipy (TIR/brentq). Scraping: Selenium (MOT) e requests + BeautifulSoup (EuroTLX
 
 ## Due fonti (entrambe Borsa Italiana)
 
-- **MOT** (`scraper/search.py`) — pagina *ricerca avanzata* pilotata via Selenium.
-  I filtri del form determinano sia l'eligibilità (Plain Vanilla, cedola fissa,
-  no subordinati) sia la **categoria** (gov/corp, ita/estero). Copre solo
-  MOT/Euronext Access Milan.
+- **MOT** (`scraper/search.py`) — pagina *ricerca avanzata* via Selenium. I filtri
+  del form determinano l'eligibilità (Plain Vanilla, cedola fissa, no subordinati)
+  e la categoria gov/corp (Tipologia). Una sola query per tipologia × valuta ×
+  cedola: il paese (e corp_ita/estero) si ricava dal **prefisso ISIN** (niente
+  iterazione paese-per-paese, sarebbe ~20× più lenta per gli stessi titoli).
 - **EuroTLX** (`scraper/eurotlx.py`) — mercato separato (gli Eurobond "XS…"),
   endpoint diretto via requests (`…/eurotlx/ricerca-avanzata/risultati.html`).
   Classifica per *categoria* strumento (44 voci → 4 bucket); non avendo filtri
@@ -28,6 +29,12 @@ Stato/white-list, 26% corporate; bollo 0,2%/anno opzionale). Modalità
 "Bilanciata": frequenza cedola assunta (configurabile) e rateo stimato dalle date
 cedola ricostruite dalla scadenza, **senza visitare le schede ISIN**. La cedola
 annua è ricavata dal nome (la colonna CEDOLA di BI mostra spesso quella periodica).
+
+## Scraping: zero-coupon sempre, salvataggio incrementale
+
+Gli **zero-coupon** (BOT, CTZ, …) sono **sempre inclusi**. Durante lo scraping i
+record vengono scritti su parquet **a blocchi** (non solo a fine run): il progresso
+è visibile su disco e un crash non perde tutto (su errore salva il parziale).
 
 ## Moduli
 

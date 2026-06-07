@@ -124,26 +124,24 @@ class ClassifierTests(unittest.TestCase):
 
 
 class ProfileTests(unittest.TestCase):
-    def test_default_fast_profiles(self) -> None:
-        profs = build_profiles(valute=("EUR", "USD"), split_by_country=False)
+    def test_profiles(self) -> None:
+        profs = build_profiles(valute=("EUR", "USD"))
         # 6 profili per valuta (2 gov_ita + 1 gov_eur + 3 corp) × 2 = 12
         self.assertEqual(len(profs), 12)
         cats = {p.categoria for p in profs}
         self.assertEqual(cats, {"gov_ita", "gov_eur", "corp"})
-        # gov_eur e corp risolvono il paese dall'ISIN
+        # gov_eur e corp risolvono sempre il paese dall'ISIN
         for p in profs:
             if p.categoria in ("gov_eur", "corp"):
                 self.assertTrue(p.resolve_country_from_isin)
             if p.categoria == "gov_ita":
                 self.assertEqual(p.paese, "Italia")
 
-    def test_split_by_country_profiles(self) -> None:
-        profs = build_profiles(valute=("EUR",), split_by_country=True)
-        cats = {p.categoria for p in profs}
-        self.assertIn("corp_ita", cats)
-        self.assertIn("corp_eur", cats)
-        self.assertNotIn("corp", cats)  # nessun sentinel quando si itera il paese
-        self.assertFalse(any(p.resolve_country_from_isin for p in profs))
+    def test_zero_coupon_adds_pass(self) -> None:
+        self.assertEqual(len(build_profiles(valute=("EUR",))), 6)
+        withzero = build_profiles(valute=("EUR",), include_zero_coupon=True)
+        self.assertEqual(len(withzero), 12)
+        self.assertTrue(any(p.cedola == "Zero Coupon" for p in withzero))
 
 
 class ResolveRecordTests(unittest.TestCase):
