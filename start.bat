@@ -4,9 +4,11 @@ chcp 65001 >nul
 title Bond Ladder
 cd /d "%~dp0"
 set "PYTHONIOENCODING=utf-8"
-set "VENV_PY=C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe"
+rem Venv dedicato, FUORI dal Drive (evita di sincronizzare migliaia di file).
+set "VENV_DIR=%USERPROFILE%\venvs\bond_ladder"
+set "VENV_PY=%VENV_DIR%\Scripts\python.exe"
 
-if not exist "%VENV_PY%" goto :novenv
+if not exist "%VENV_PY%" call :setup
 
 echo ============================================================
 echo   Bond Ladder - avvio in corso...
@@ -17,15 +19,16 @@ echo.
 "%VENV_PY%" -m streamlit run "%~dp0app.py"
 goto :end
 
-:novenv
-echo.
-echo Venv non trovato in:
-echo   %VENV_PY%
-echo.
-echo Crealo e installa le dipendenze ^(una sola volta^), da questa cartella:
-echo   python -m venv C:\Users\Beppe\venvs\bond_ladder
-echo   "%VENV_PY%" -m pip install -r requirements.txt
-echo.
+:setup
+echo ============================================================
+echo   Primo avvio: creo l'ambiente Python (una sola volta) in
+echo   %VENV_DIR%
+echo ============================================================
+py -3 -m venv "%VENV_DIR%"
+if errorlevel 1 python -m venv "%VENV_DIR%"
+"%VENV_PY%" -m pip install --upgrade pip
+"%VENV_PY%" -m pip install -r "%~dp0requirements.txt"
+goto :eof
 
 :end
 pause

@@ -17,3 +17,6 @@ data/scrape_log.txt
 
 # materiale di riferimento (sorgenti di altri repo)
 _ref/
+
+# config locale di Claude Code (specifica del PC)
+.claude/

@@ -23,12 +23,17 @@ rateo stimato dall'anniversario della scadenza, senza visitare le schede ISIN.
 
 ## Setup (prima volta)
 
-Il progetto è su Google Drive: crea il **venv fuori dal Drive** per evitare la
-sincronizzazione di migliaia di file.
+Non serve fare nulla a mano: al **primo avvio** (`start.bat` o `start.ps1`) l'app
+crea da sola il **venv fuori dal Drive** in `%USERPROFILE%\venvs\bond_ladder`
+(così non si sincronizzano migliaia di file su Google Drive) e installa le
+dipendenze. Quella cartella `venvs` contiene anche il venv di *memoria*: **non
+cancellarla** (vedi `_LEGGIMI_venv_dei_progetti_NON_CANCELLARE.txt`).
+
+In alternativa, a mano:
 
 ```powershell
-python -m venv C:\Users\Beppe\venvs\bond_ladder
-C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe -m pip install -r requirements.txt
+python -m venv $env:USERPROFILE\venvs\bond_ladder
+$env:USERPROFILE\venvs\bond_ladder\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 ## Avvio
@@ -46,7 +51,7 @@ oppure manualmente:
 
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"
-C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe -m streamlit run app.py
+$env:USERPROFILE\venvs\bond_ladder\Scripts\python.exe -m streamlit run app.py
 ```
 
 Si apre su `http://localhost:8501` (o porta indicata). I tre tab:
@@ -77,7 +82,7 @@ tipo `ESEMPIO … (FAKE)`, giusto per far partire l'app con qualcosa di mostrabi
 
 ```powershell
 $env:PYTHONPATH = (Get-Location)
-C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe -m unittest discover -s tests
+$env:USERPROFILE\venvs\bond_ladder\Scripts\python.exe -m unittest discover -s tests
 ```
 
 ## Struttura

@@ -1,14 +1,15 @@
-# Avvia l'app Bond Ladder (Streamlit) usando il venv dedicato.
+# Avvia l'app Bond Ladder (Streamlit) usando il venv dedicato, FUORI dal Drive.
 $ErrorActionPreference = "Stop"
-$venvPy = "C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe"
+$venvDir = Join-Path $env:USERPROFILE "venvs\bond_ladder"
+$venvPy  = Join-Path $venvDir "Scripts\python.exe"
 
 if (-not (Test-Path $venvPy)) {
-    Write-Host "Venv non trovato: $venvPy" -ForegroundColor Yellow
-    Write-Host "Crealo e installa le dipendenze (una tantum):" -ForegroundColor Yellow
-    Write-Host "  python -m venv C:\Users\Beppe\venvs\bond_ladder"
-    Write-Host "  C:\Users\Beppe\venvs\bond_ladder\Scripts\python.exe -m pip install -r requirements.txt"
-    exit 1
+    Write-Host "Primo avvio: creo l'ambiente Python in $venvDir ..." -ForegroundColor Cyan
+    if (Get-Command py -ErrorAction SilentlyContinue) { & py -3 -m venv $venvDir }
+    else { & python -m venv $venvDir }
+    & $venvPy -m pip install --upgrade pip
+    & $venvPy -m pip install -r (Join-Path $PSScriptRoot "requirements.txt")
 }
 
 $env:PYTHONIOENCODING = "utf-8"
-& $venvPy -m streamlit run "$PSScriptRoot\app.py"
+& $venvPy -m streamlit run (Join-Path $PSScriptRoot "app.py")
